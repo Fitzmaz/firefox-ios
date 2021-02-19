@@ -294,6 +294,27 @@ class Tab: NSObject {
             self.webView = webView
             self.webView?.addObserver(self, forKeyPath: KVOConstants.URL.rawValue, options: .new, context: nil)
             UserScriptManager.shared.injectUserScriptsIntoTab(self, nightMode: nightMode, noImageMode: noImageMode)
+            if #available(iOS 14.0, *) {
+                let ext = TMWebViewExtension()
+                ext.webView = webView
+                webView.configuration.userContentController.addExtension(ext)
+                // inject *.user.js
+                guard let rootURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false).appendingPathComponent("Downloads") else {
+                    return
+                }
+                guard let contents = try? FileManager.default.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil, options: [.skipsSubdirectoryDescendants, .skipsHiddenFiles]) else {
+                    return
+                }
+                for url in contents {
+                    print(url)
+                    if !url.lastPathComponent.hasSuffix(".user.js") {
+                        return
+                    }
+                    guard let source = try? String(contentsOf: url) else { return }
+                    let userScript = WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: ext.world)
+                    webView.configuration.userContentController.addUserScript(userScript)
+                }
+            }
             tabDelegate?.tab?(self, didCreateWebView: webView)
         }
     }
@@ -459,7 +480,7 @@ class Tab: NSObject {
             if let url = request.url, url.isFileURL, request.isPrivileged {
                 return webView.loadFileURL(url, allowingReadAccessTo: url)
             }
-
+            // TODO: inject user scripts
             return webView.load(request)
         }
         return nil
